@@ -49,6 +49,7 @@ class FakeSession:
             "url": url,
             "params": kwargs.get("params"),
             "data": kwargs.get("data"),
+            "headers": kwargs.get("headers"),
         }
         self.requests.append(request)
         route = self._routes.get((method, url))

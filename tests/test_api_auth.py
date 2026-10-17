@@ -37,6 +37,20 @@ async def test_login_sends_csrf_and_fetches_members(api, const, models):
     assert switch["params"] == {"id": "101"}
 
 
+async def test_requests_send_a_browser_user_agent(api, const):
+    """SpielerPlus answers plain client user agents with HTTP 403."""
+    session = FakeSession(
+        {
+            ("GET", const.LOGIN_URL): (200, LOGIN_PAGE),
+            ("POST", const.LOGIN_URL): (200, "<html><title>Team auswählen</title></html>"),
+        }
+    )
+    await api.SpielerplusClient(session, "a@b.c", "secret").async_login()
+
+    user_agent = session.requests[0]["headers"]["User-Agent"]
+    assert user_agent.startswith("Mozilla/5.0")
+
+
 async def test_login_failure_raises_auth_error(api, const):
     session = FakeSession(
         {

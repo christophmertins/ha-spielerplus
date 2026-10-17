@@ -23,6 +23,15 @@ _TITLE_RE = re.compile(r"<title[^>]*>(.*?)</title>", re.IGNORECASE | re.DOTALL)
 
 _LOGIN_TITLES = {"Einloggen", "Login"}
 
+#: SpielerPlus answers non-browser user agents with HTTP 403.
+_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+    ),
+    "Accept-Language": "de-DE,de;q=0.9",
+}
+
 
 class SpielerplusError(Exception):
     """Raised for any non-auth problem talking to SpielerPlus."""
@@ -51,6 +60,7 @@ class SpielerplusClient:
 
     async def _get(self, url: str, **kwargs) -> tuple[int, str]:
         try:
+            kwargs.setdefault("headers", _HEADERS)
             async with self._session.get(url, **kwargs) as response:
                 return response.status, await response.text()
         except aiohttp.ClientError as err:
@@ -60,7 +70,9 @@ class SpielerplusClient:
 
     async def _post(self, url: str, data: dict[str, str]) -> tuple[int, str]:
         try:
-            async with self._session.post(url, data=data) as response:
+            async with self._session.post(
+                url, data=data, headers=_HEADERS
+            ) as response:
                 return response.status, await response.text()
         except aiohttp.ClientError as err:
             raise SpielerplusError(f"POST {url} failed: {err}") from err
