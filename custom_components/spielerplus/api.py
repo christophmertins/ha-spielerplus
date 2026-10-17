@@ -121,14 +121,15 @@ class SpielerplusClient:
                 raise SpielerplusAuthError("not logged in")
             return parse_members(html)
 
+    async def _select_member_locked(self, member_id: str) -> None:
+        status, _ = await self._get(const.SWITCH_USER_URL, params={"id": member_id})
+        if status >= 400:
+            raise SpielerplusError(f"switch-user returned HTTP {status}")
+
     async def async_select_member(self, member_id: str) -> None:
         """Switch the session context to a member/team."""
         async with self.lock:
-            status, _ = await self._get(
-                const.SWITCH_USER_URL, params={"id": member_id}
-            )
-            if status >= 400:
-                raise SpielerplusError(f"switch-user returned HTTP {status}")
+            await self._select_member_locked(member_id)
 
     async def async_get_events(self) -> list[SpEvent]:
         """Load all events of the currently selected member.
@@ -190,7 +191,9 @@ class SpielerplusClient:
     ) -> None:
         """Confirm, decline or mark unsure the attendance for an event.
 
-        SpielerPlus requires a reason for ``unsicher``/``absage`` and answers a
+        The session must act as the target member: SpielerPlus answers a write
+        for a member other than the currently selected one with HTTP 403. It
+        also requires a reason for ``unsicher``/``absage`` and answers a
         rejected request with HTTP 200 and ``{"error": true}``, so the body is
         inspected too.
         """
@@ -198,6 +201,7 @@ class SpielerplusClient:
             reason = const.DEFAULT_PARTICIPATION_REASON
 
         async with self.lock:
+            await self._select_member_locked(member_id)
             http_status, body = await self._post(
                 const.PARTICIPATION_URL,
                 {

@@ -63,10 +63,35 @@ async def test_get_events_raises_when_panels_present_but_unparsed(api, const):
         await api.SpielerplusClient(session, "a", "b").async_get_events()
 
 
-async def test_set_participation_raises_when_api_reports_error(api, const):
-    session = FakeSession(
-        {("POST", const.PARTICIPATION_URL): (200, '{"error":true,"html":"form"}')}
+def _session(const, body: str = "{}") -> FakeSession:
+    """A fake session that serves the member switch and the participation POST."""
+    return FakeSession(
+        {
+            ("GET", const.SWITCH_USER_URL): (200, "<html></html>"),
+            ("POST", const.PARTICIPATION_URL): (200, body),
+        }
     )
+
+
+def _participation_post(session):
+    return next(r for r in session.requests if r["method"] == "POST")
+
+
+async def test_set_participation_switches_to_the_target_member_first(api, const):
+    session = _session(const)
+    await api.SpielerplusClient(session, "a", "b").async_set_participation(
+        member_id="101", event_type="training", event_id="111",
+        status=api.Participation.ZUSAGE,
+    )
+    switch = session.requests[0]
+    assert switch["method"] == "GET"
+    assert switch["url"] == const.SWITCH_USER_URL
+    assert switch["params"] == {"id": "101"}
+    assert session.requests[1]["method"] == "POST"
+
+
+async def test_set_participation_raises_when_api_reports_error(api, const):
+    session = _session(const, '{"error":true,"html":"form"}')
     client = api.SpielerplusClient(session, "a", "b")
     with pytest.raises(api.SpielerplusError):
         await client.async_set_participation(
@@ -76,25 +101,25 @@ async def test_set_participation_raises_when_api_reports_error(api, const):
 
 
 async def test_set_participation_defaults_reason_for_absage(api, const):
-    session = FakeSession({("POST", const.PARTICIPATION_URL): (200, "{}")})
+    session = _session(const)
     await api.SpielerplusClient(session, "a", "b").async_set_participation(
         member_id="101", event_type="training", event_id="111",
         status=api.Participation.ABSAGE,
     )
-    assert session.requests[0]["data"]["Participation[reason]"] == "Home Assistant"
+    assert _participation_post(session)["data"]["Participation[reason]"] == "Home Assistant"
 
 
 async def test_set_participation_keeps_empty_reason_for_zusage(api, const):
-    session = FakeSession({("POST", const.PARTICIPATION_URL): (200, "{}")})
+    session = _session(const)
     await api.SpielerplusClient(session, "a", "b").async_set_participation(
         member_id="101", event_type="training", event_id="111",
         status=api.Participation.ZUSAGE,
     )
-    assert session.requests[0]["data"]["Participation[reason]"] == ""
+    assert _participation_post(session)["data"]["Participation[reason]"] == ""
 
 
 async def test_set_participation_sends_expected_fields(api, const, models):
-    session = FakeSession({("POST", const.PARTICIPATION_URL): (200, "{}")})
+    session = _session(const)
     client = api.SpielerplusClient(session, "a", "b")
 
     await client.async_set_participation(
@@ -105,7 +130,7 @@ async def test_set_participation_sends_expected_fields(api, const, models):
         reason="krank",
     )
 
-    assert session.requests[0]["data"] == {
+    assert _participation_post(session)["data"] == {
         "Participation[type]": "training",
         "Participation[typeid]": "111",
         "Participation[participation]": "0",
