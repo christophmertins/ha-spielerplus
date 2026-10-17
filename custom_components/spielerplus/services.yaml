@@ -1,0 +1,41 @@
+set_participation:
+  name: Zu-/Absage setzen
+  description: Setzt den Teilnahmestatus eines Mitglieds für einen Termin.
+  target:
+    entity:
+      integration: spielerplus
+      domain:
+        - calendar
+        - sensor
+        - button
+  fields:
+    event_id:
+      name: Termin-ID
+      description: Die ID des Termins (Attribut event_id der Sensoren).
+      required: true
+      example: "12345678"
+      selector:
+        text:
+    status:
+      name: Status
+      description: zusage, unsicher oder absage.
+      required: true
+      selector:
+        select:
+          options:
+            - zusage
+            - unsicher
+            - absage
+    event_type:
+      name: Termin-Typ
+      description: Optional; sonst wird der Typ aus den bekannten Terminen ermittelt.
+      required: false
+      example: training
+      selector:
+        text:
+    reason:
+      name: Grund
+      description: Optionaler Grund für die Zu-/Absage.
+      required: false
+      selector:
+        text:

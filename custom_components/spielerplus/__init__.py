@@ -13,6 +13,7 @@ from homeassistant.helpers.aiohttp_client import async_create_clientsession
 from . import const
 from .api import SpielerplusAuthError, SpielerplusClient
 from .coordinator import SpielerplusCoordinator
+from .services import async_setup_services, async_unload_services
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -42,6 +43,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
+    await async_setup_services(hass)
     return True
 
 
@@ -55,4 +57,6 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if not await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
         return False
     hass.data[const.DOMAIN].pop(entry.entry_id, None)
+    if not hass.data[const.DOMAIN]:
+        await async_unload_services(hass)
     return True
