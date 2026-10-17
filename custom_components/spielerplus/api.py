@@ -209,7 +209,10 @@ class SpielerplusClient:
                 },
             )
             if http_status != 200:
-                raise SpielerplusError(f"participation returned HTTP {http_status}")
+                snippet = " ".join(body.split())[:200]
+                raise SpielerplusError(
+                    f"participation returned HTTP {http_status}: {snippet}"
+                )
             try:
                 payload = json.loads(body)
             except ValueError as err:
