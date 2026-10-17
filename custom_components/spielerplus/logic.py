@@ -5,7 +5,7 @@ No network and no Home Assistant imports: everything here is unit-testable.
 
 from __future__ import annotations
 
-from datetime import date, datetime, time, timedelta
+from datetime import date, datetime, time, timedelta, tzinfo
 
 from .const import PARTICIPATION_VALUES
 from .models import Participation, ResolvedEvent, SpEvent, SpMember
@@ -32,8 +32,14 @@ def resolve_year(day: int, month: int, today: date) -> int:
     return today.year
 
 
-def resolve_event(event: SpEvent, today: date) -> ResolvedEvent:
-    """Resolve an event's day/month into concrete datetimes."""
+def resolve_event(
+    event: SpEvent, today: date, tz: tzinfo | None = None
+) -> ResolvedEvent:
+    """Resolve an event's day/month into concrete datetimes.
+
+    When ``tz`` is given the resulting datetimes are timezone-aware (Home
+    Assistant requires this for ``timestamp`` sensors).
+    """
     day = date(resolve_year(event.day, event.month, today), event.month, event.day)
     start = datetime.combine(day, event.start_time or time(0, 0))
     end = (
@@ -46,12 +52,20 @@ def resolve_event(event: SpEvent, today: date) -> ResolvedEvent:
         if event.meeting_time is not None
         else None
     )
+    if tz is not None:
+        start = start.replace(tzinfo=tz)
+        end = end.replace(tzinfo=tz)
+        meeting = meeting.replace(tzinfo=tz) if meeting is not None else None
     return ResolvedEvent(event=event, start=start, end=end, meeting=meeting)
 
 
-def resolve_events(events: list[SpEvent], today: date) -> list[ResolvedEvent]:
+def resolve_events(
+    events: list[SpEvent], today: date, tz: tzinfo | None = None
+) -> list[ResolvedEvent]:
     """Resolve a list of events and sort them by start datetime."""
-    return sorted((resolve_event(event, today) for event in events), key=lambda r: r.start)
+    return sorted(
+        (resolve_event(event, today, tz) for event in events), key=lambda r: r.start
+    )
 
 
 def upcoming(events: list[ResolvedEvent], now: datetime) -> list[ResolvedEvent]:

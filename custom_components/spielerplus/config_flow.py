@@ -63,9 +63,11 @@ class SpielerplusConfigFlow(ConfigFlow, domain=const.DOMAIN):
         try:
             await client.async_login()
             self._members = await client.async_get_members()
-        except SpielerplusAuthError:
+        except SpielerplusAuthError as err:
+            _LOGGER.warning("SpielerPlus rejected the login: %s", err)
             return "invalid_auth"
-        except SpielerplusError:
+        except SpielerplusError as err:
+            _LOGGER.warning("SpielerPlus connection failed: %s", err)
             return "cannot_connect"
         if not self._members:
             return "no_members"

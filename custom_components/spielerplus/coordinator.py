@@ -5,12 +5,13 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import timedelta
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from homeassistant.util import dt as dt_util
 
 from . import const
 from .api import SpielerplusAuthError, SpielerplusClient, SpielerplusError
@@ -61,8 +62,8 @@ class SpielerplusCoordinator(DataUpdateCoordinator[dict[str, MemberData]]):
         }
 
     async def _async_update_data(self) -> dict[str, MemberData]:
-        today = date.today()
-        now = datetime.now()
+        now = dt_util.now()
+        today = now.date()
         data: dict[str, MemberData] = {}
 
         for member_id, member in self.members.items():
@@ -76,7 +77,9 @@ class SpielerplusCoordinator(DataUpdateCoordinator[dict[str, MemberData]]):
 
             data[member_id] = MemberData(
                 member=member,
-                events=upcoming(resolve_events(events, today), now),
+                events=upcoming(
+                    resolve_events(events, today, dt_util.DEFAULT_TIME_ZONE), now
+                ),
             )
 
         return data

@@ -33,6 +33,14 @@ def test_resolve_event_builds_start_end_meeting(logic, models):
     assert r.meeting is None
 
 
+def test_resolve_event_attaches_timezone(logic, models):
+    from datetime import timezone
+
+    r = logic.resolve_event(_ev(models, "1"), date(2026, 10, 18), tz=timezone.utc)
+    assert r.start.tzinfo is timezone.utc
+    assert r.end.tzinfo is timezone.utc
+
+
 def test_next_event_filters_type_and_time(logic, models):
     events = logic.resolve_events(
         [_ev(models, "a"), _ev(models, "b", t="game", st=time(14, 0))],
