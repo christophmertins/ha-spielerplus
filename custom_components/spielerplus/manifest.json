@@ -1,0 +1,12 @@
+{
+  "domain": "spielerplus",
+  "name": "SpielerPlus",
+  "codeowners": ["@christophmertins"],
+  "config_flow": true,
+  "documentation": "https://github.com/christophmertins/ha-spielerplus",
+  "issue_tracker": "https://github.com/christophmertins/ha-spielerplus/issues",
+  "integration_type": "hub",
+  "iot_class": "cloud_polling",
+  "requirements": ["beautifulsoup4==4.12.3"],
+  "version": "0.1.0"
+}
