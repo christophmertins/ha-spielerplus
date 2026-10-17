@@ -75,6 +75,12 @@ data:
 `event_id` steht in den Attributen der Sensoren. `event_type` ist optional und wird sonst
 aus den bekannten Terminen ermittelt.
 
+Für `absage` und `unsicher` verlangt SpielerPlus einen Grund. Wird kein eigener `reason`
+angegeben, sendet die Integration als Grund **„Home Assistant"**. Die Buttons
+„Zusagen"/„Absagen" wirken auf den jeweils **nächsten kommenden Termin** des Mitglieds und
+sind nicht verfügbar, wenn es keinen kommenden Termin gibt oder die Zu-/Absagefrist
+abgelaufen ist.
+
 ## Tests
 
 Reine Logik-, Parser- und API-Tests ohne Home-Assistant-Abhängigkeit:
