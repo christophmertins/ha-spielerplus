@@ -48,6 +48,12 @@ def test_upcoming_excludes_past(logic, models):
     assert logic.upcoming(events, datetime(2026, 10, 18, 8, 0)) == []
 
 
+def test_member_options(logic, models):
+    assert logic.member_options(
+        [models.SpMember(id="101", name="Kind Eins", team="Team A")]
+    ) == {"101": "Kind Eins (Team A)"}
+
+
 def test_sensor_state_attributes_and_none(logic, models):
     assert logic.sensor_state(None, []) == (None, {})
     state, attrs = logic.sensor_state(

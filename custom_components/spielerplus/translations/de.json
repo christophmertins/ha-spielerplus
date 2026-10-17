@@ -1,0 +1,46 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "SpielerPlus-Konto",
+        "description": "Melde dich mit deinem SpielerPlus-Account an.",
+        "data": {
+          "email": "E-Mail",
+          "password": "Passwort"
+        }
+      },
+      "members": {
+        "title": "Mitglieder auswählen",
+        "description": "Wähle die Mitglieder, deren Termine angezeigt werden sollen.",
+        "data": {
+          "members": "Mitglieder"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Erneut anmelden",
+        "description": "Die Anmeldung ist abgelaufen. Bitte gib das Passwort erneut ein.",
+        "data": {
+          "password": "Passwort"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "E-Mail oder Passwort ist falsch.",
+      "cannot_connect": "SpielerPlus ist nicht erreichbar.",
+      "no_members": "Es wurden keine Mitglieder gefunden."
+    },
+    "abort": {
+      "reauth_successful": "Die Anmeldung wurde aktualisiert."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "SpielerPlus-Optionen",
+        "data": {
+          "scan_interval": "Aktualisierungsintervall (Minuten)"
+        }
+      }
+    }
+  }
+}
