@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-from datetime import datetime
-
 from homeassistant.components.button import ButtonEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.util import dt as dt_util
 
 from . import const, logic
 from .api import SpielerplusClient
@@ -65,7 +64,7 @@ class SpielerplusParticipationButton(SpielerplusEntity, ButtonEntity):
 
     @property
     def _target_event(self) -> ResolvedEvent | None:
-        return logic.next_event(self.events, datetime.now())
+        return logic.next_event(self.events, dt_util.now())
 
     @property
     def available(self) -> bool:

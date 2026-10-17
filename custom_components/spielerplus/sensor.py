@@ -8,6 +8,7 @@ from homeassistant.components.sensor import SensorDeviceClass, SensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.util import dt as dt_util
 
 from . import const, logic
 from .coordinator import SpielerplusCoordinator
@@ -53,7 +54,7 @@ class SpielerplusNextEventSensor(SpielerplusEntity, SensorEntity):
 
     @property
     def _next_event(self) -> ResolvedEvent | None:
-        return logic.next_event(self.events, datetime.now(), type_=self._event_type)
+        return logic.next_event(self.events, dt_util.now(), type_=self._event_type)
 
     @property
     def native_value(self) -> datetime | None:
