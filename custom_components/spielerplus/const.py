@@ -20,6 +20,8 @@ DEFAULT_SCAN_INTERVAL = timedelta(minutes=15)
 
 CONF_MEMBERS = "members"
 CONF_SCAN_INTERVAL = "scan_interval"
+CONF_EMAIL = "email"
+CONF_PASSWORD = "password"
 
 #: Value sent as ``Participation[participation]`` for each state.
 PARTICIPATION_VALUES: dict[Participation, str] = {

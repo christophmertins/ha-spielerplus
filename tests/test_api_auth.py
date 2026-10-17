@@ -1,8 +1,5 @@
 import pytest
 
-from custom_components.spielerplus import const
-from custom_components.spielerplus.api import SpielerplusAuthError, SpielerplusClient
-from custom_components.spielerplus.models import SpMember
 from tests.fake_session import FakeSession
 
 LOGIN_PAGE = '<html><head><meta name="csrf-token" content="TOK"></head></html>'
@@ -13,7 +10,7 @@ TEAM_PAGE = (
 )
 
 
-async def test_login_sends_csrf_and_fetches_members():
+async def test_login_sends_csrf_and_fetches_members(api, const, models):
     session = FakeSession(
         {
             ("GET", const.LOGIN_URL): (200, LOGIN_PAGE),
@@ -22,11 +19,11 @@ async def test_login_sends_csrf_and_fetches_members():
             ("GET", const.SWITCH_USER_URL): (200, "<html></html>"),
         }
     )
-    client = SpielerplusClient(session, "a@b.c", "secret")
+    client = api.SpielerplusClient(session, "a@b.c", "secret")
 
     await client.async_login()
     assert await client.async_get_members() == [
-        SpMember(id="101", name="Kind Eins", team="Team A")
+        models.SpMember(id="101", name="Kind Eins", team="Team A")
     ]
     await client.async_select_member("101")
 
@@ -40,12 +37,12 @@ async def test_login_sends_csrf_and_fetches_members():
     assert switch["params"] == {"id": "101"}
 
 
-async def test_login_failure_raises_auth_error():
+async def test_login_failure_raises_auth_error(api, const):
     session = FakeSession(
         {
             ("GET", const.LOGIN_URL): (200, LOGIN_PAGE),
             ("POST", const.LOGIN_URL): (200, "<html><title>Einloggen</title></html>"),
         }
     )
-    with pytest.raises(SpielerplusAuthError):
-        await SpielerplusClient(session, "a@b.c", "bad").async_login()
+    with pytest.raises(api.SpielerplusAuthError):
+        await api.SpielerplusClient(session, "a@b.c", "bad").async_login()

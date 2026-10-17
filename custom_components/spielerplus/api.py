@@ -133,6 +133,7 @@ class SpielerplusClient:
 
             events = parse_events(html)
             seen = {event.id for event in events}
+            panels_seen = "event-" in html
 
             offset = 5
             while True:
@@ -147,6 +148,8 @@ class SpielerplusClient:
                     raise SpielerplusError("ajaxgetevents returned invalid JSON") from err
 
                 fragment = payload.get("html") or ""
+                if "event-" in fragment:
+                    panels_seen = True
                 for event in parse_events(fragment):
                     if event.id not in seen:
                         seen.add(event.id)
@@ -156,6 +159,12 @@ class SpielerplusClient:
                 if not fragment or count in (None, -1):
                     break
                 offset += 5
+
+            if panels_seen and not events:
+                raise SpielerplusError(
+                    "event panels were present but none could be parsed "
+                    "(SpielerPlus layout changed?)"
+                )
 
             return events
 
