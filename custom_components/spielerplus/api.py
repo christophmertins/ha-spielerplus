@@ -7,13 +7,15 @@ session and speaks the same requests the website's own JavaScript uses.
 from __future__ import annotations
 
 import asyncio
+import json
 import re
 
 import aiohttp
 
 from . import const
-from .models import SpMember
-from .parser import parse_members
+from .logic import participation_value
+from .models import Participation, SpEvent, SpMember
+from .parser import parse_events, parse_members
 
 _META_CSRF_RE = re.compile(r'<meta[^>]+name="csrf-token"[^>]+content="([^"]+)"')
 _INPUT_CSRF_RE = re.compile(r'<input[^>]+name="_csrf"[^>]+value="([^"]+)"')
@@ -115,3 +117,70 @@ class SpielerplusClient:
             )
             if status >= 400:
                 raise SpielerplusError(f"switch-user returned HTTP {status}")
+
+    async def async_get_events(self) -> list[SpEvent]:
+        """Load all events of the currently selected member.
+
+        The first page is server-rendered; further pages are appended through
+        ``/events/ajaxgetevents`` until the ajax fragments run out.
+        """
+        async with self.lock:
+            status, html = await self._get(const.EVENTS_URL)
+            if status != 200:
+                raise SpielerplusError(f"events returned HTTP {status}")
+            if _title(html) in _LOGIN_TITLES:
+                raise SpielerplusAuthError("not logged in")
+
+            events = parse_events(html)
+            seen = {event.id for event in events}
+
+            offset = 5
+            while True:
+                status, body = await self._post(
+                    const.AJAX_EVENTS_URL, {"offset": str(offset)}
+                )
+                if status != 200:
+                    raise SpielerplusError(f"ajaxgetevents returned HTTP {status}")
+                try:
+                    payload = json.loads(body)
+                except ValueError as err:
+                    raise SpielerplusError("ajaxgetevents returned invalid JSON") from err
+
+                fragment = payload.get("html") or ""
+                for event in parse_events(fragment):
+                    if event.id not in seen:
+                        seen.add(event.id)
+                        events.append(event)
+
+                count = payload.get("count")
+                if not fragment or count in (None, -1):
+                    break
+                offset += 5
+
+            return events
+
+    async def async_set_participation(
+        self,
+        member_id: str,
+        event_type: str,
+        event_id: str,
+        status: Participation,
+        reason: str = "",
+    ) -> None:
+        """Confirm, decline or mark unsure the attendance for an event."""
+        async with self.lock:
+            http_status, _ = await self._post(
+                const.PARTICIPATION_URL,
+                {
+                    "Participation[type]": event_type,
+                    "Participation[typeid]": event_id,
+                    "Participation[participation]": participation_value(status),
+                    "Participation[user_id]": member_id,
+                    "Participation[reason]": reason,
+                },
+            )
+            if http_status != 200:
+                raise SpielerplusError(
+                    f"participation returned HTTP {http_status}"
+                )
+
