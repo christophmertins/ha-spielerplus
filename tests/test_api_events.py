@@ -63,6 +63,36 @@ async def test_get_events_raises_when_panels_present_but_unparsed(api, const):
         await api.SpielerplusClient(session, "a", "b").async_get_events()
 
 
+async def test_set_participation_raises_when_api_reports_error(api, const):
+    session = FakeSession(
+        {("POST", const.PARTICIPATION_URL): (200, '{"error":true,"html":"form"}')}
+    )
+    client = api.SpielerplusClient(session, "a", "b")
+    with pytest.raises(api.SpielerplusError):
+        await client.async_set_participation(
+            member_id="101", event_type="training", event_id="111",
+            status=api.Participation.ABSAGE, reason="krank",
+        )
+
+
+async def test_set_participation_defaults_reason_for_absage(api, const):
+    session = FakeSession({("POST", const.PARTICIPATION_URL): (200, "{}")})
+    await api.SpielerplusClient(session, "a", "b").async_set_participation(
+        member_id="101", event_type="training", event_id="111",
+        status=api.Participation.ABSAGE,
+    )
+    assert session.requests[0]["data"]["Participation[reason]"] == "Home Assistant"
+
+
+async def test_set_participation_keeps_empty_reason_for_zusage(api, const):
+    session = FakeSession({("POST", const.PARTICIPATION_URL): (200, "{}")})
+    await api.SpielerplusClient(session, "a", "b").async_set_participation(
+        member_id="101", event_type="training", event_id="111",
+        status=api.Participation.ZUSAGE,
+    )
+    assert session.requests[0]["data"]["Participation[reason]"] == ""
+
+
 async def test_set_participation_sends_expected_fields(api, const, models):
     session = FakeSession({("POST", const.PARTICIPATION_URL): (200, "{}")})
     client = api.SpielerplusClient(session, "a", "b")

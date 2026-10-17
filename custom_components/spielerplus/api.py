@@ -188,9 +188,17 @@ class SpielerplusClient:
         status: Participation,
         reason: str = "",
     ) -> None:
-        """Confirm, decline or mark unsure the attendance for an event."""
+        """Confirm, decline or mark unsure the attendance for an event.
+
+        SpielerPlus requires a reason for ``unsicher``/``absage`` and answers a
+        rejected request with HTTP 200 and ``{"error": true}``, so the body is
+        inspected too.
+        """
+        if not reason and status in (Participation.UNSICHER, Participation.ABSAGE):
+            reason = const.DEFAULT_PARTICIPATION_REASON
+
         async with self.lock:
-            http_status, _ = await self._post(
+            http_status, body = await self._post(
                 const.PARTICIPATION_URL,
                 {
                     "Participation[type]": event_type,
@@ -201,7 +209,13 @@ class SpielerplusClient:
                 },
             )
             if http_status != 200:
+                raise SpielerplusError(f"participation returned HTTP {http_status}")
+            try:
+                payload = json.loads(body)
+            except ValueError as err:
+                raise SpielerplusError("participation returned invalid JSON") from err
+            if payload.get("error"):
                 raise SpielerplusError(
-                    f"participation returned HTTP {http_status}"
+                    "SpielerPlus rejected the participation request"
                 )
 

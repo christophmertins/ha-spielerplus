@@ -23,6 +23,10 @@ CONF_SCAN_INTERVAL = "scan_interval"
 CONF_EMAIL = "email"
 CONF_PASSWORD = "password"
 
+#: SpielerPlus rejects "unsicher"/"absage" without a reason; this is sent when
+#: the user does not provide one (e.g. for the one-click buttons).
+DEFAULT_PARTICIPATION_REASON = "Home Assistant"
+
 #: Value sent as ``Participation[participation]`` for each state.
 PARTICIPATION_VALUES: dict[Participation, str] = {
     Participation.ZUSAGE: "1",
