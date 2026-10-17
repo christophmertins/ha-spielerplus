@@ -68,8 +68,7 @@ class SpielerplusCoordinator(DataUpdateCoordinator[dict[str, MemberData]]):
 
         for member_id, member in self.members.items():
             try:
-                await self.client.async_select_member(member_id)
-                events = await self.client.async_get_events()
+                events = await self.client.async_get_member_events(member_id)
             except SpielerplusAuthError as err:
                 raise ConfigEntryAuthFailed(str(err)) from err
             except SpielerplusError as err:

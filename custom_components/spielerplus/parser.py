@@ -25,6 +25,15 @@ _STATUS_BY_TITLE = {
     "Absagen / Abwesend": Participation.ABSAGE,
 }
 
+#: SpielerPlus shows this instead of the buttons once the deadline has passed.
+_DEADLINE_TEXT = "Zeit zum Zu-/Absagen abgelaufen"
+_PANEL_ID_ATTR_RE = re.compile(r'id="event-[a-z]+-\d+"')
+
+
+def count_event_panels(html: str) -> int:
+    """Number of event panels in an events page or ajax fragment."""
+    return len(_PANEL_ID_ATTR_RE.findall(html))
+
 
 def parse_members(html: str) -> list[SpMember]:
     """Parse the ``/site/select-team`` page into the account's members.
@@ -87,7 +96,7 @@ def _participation_and_deadline(panel: Tag) -> tuple[Participation, bool]:
             status = _STATUS_BY_TITLE.get(
                 (button.get("title") or "").strip(), Participation.OFFEN
             )
-    deadline_passed = disabled or panel.select_one(".countdown") is not None
+    deadline_passed = disabled or _DEADLINE_TEXT in panel.get_text()
     return status, deadline_passed
 
 

@@ -36,6 +36,9 @@ class SpielerplusNextEventSensor(SpielerplusEntity, SensorEntity):
     """Start of the next event, optionally restricted to trainings."""
 
     _attr_device_class = SensorDeviceClass.TIMESTAMP
+    #: The full event list is useful in the state machine but too large (and
+    #: needlessly repetitive) for the recorder database.
+    _unrecorded_attributes = frozenset({"events"})
 
     def __init__(
         self,

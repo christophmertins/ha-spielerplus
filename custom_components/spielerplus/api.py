@@ -15,13 +15,16 @@ import aiohttp
 from . import const
 from .logic import participation_value
 from .models import Participation, SpEvent, SpMember
-from .parser import parse_events, parse_members
+from .parser import count_event_panels, parse_events, parse_members
 
 _META_CSRF_RE = re.compile(r'<meta[^>]+name="csrf-token"[^>]+content="([^"]+)"')
 _INPUT_CSRF_RE = re.compile(r'<input[^>]+name="_csrf"[^>]+value="([^"]+)"')
 _TITLE_RE = re.compile(r"<title[^>]*>(.*?)</title>", re.IGNORECASE | re.DOTALL)
 
 _LOGIN_TITLES = {"Einloggen", "Login"}
+_EVENT_TITLE_PREFIXES = ("Termine", "Events")
+#: Safety net so a misbehaving pagination endpoint cannot loop forever.
+_MAX_EVENT_PAGES = 50
 
 #: SpielerPlus answers non-browser user agents with HTTP 403.
 _HEADERS = {
@@ -31,6 +34,8 @@ _HEADERS = {
     ),
     "Accept-Language": "de-DE,de;q=0.9",
 }
+
+_TIMEOUT = aiohttp.ClientTimeout(total=30)
 
 
 class SpielerplusError(Exception):
@@ -61,6 +66,7 @@ class SpielerplusClient:
     async def _get(self, url: str, **kwargs) -> tuple[int, str]:
         try:
             kwargs.setdefault("headers", _HEADERS)
+            kwargs.setdefault("timeout", _TIMEOUT)
             async with self._session.get(url, **kwargs) as response:
                 return response.status, await response.text()
         except aiohttp.ClientError as err:
@@ -71,7 +77,7 @@ class SpielerplusClient:
     async def _post(self, url: str, data: dict[str, str]) -> tuple[int, str]:
         try:
             async with self._session.post(
-                url, data=data, headers=_HEADERS
+                url, data=data, headers=_HEADERS, timeout=_TIMEOUT
             ) as response:
                 return response.status, await response.text()
         except aiohttp.ClientError as err:
@@ -83,6 +89,14 @@ class SpielerplusClient:
     def _extract_csrf(html: str) -> str | None:
         match = _META_CSRF_RE.search(html) or _INPUT_CSRF_RE.search(html)
         return match.group(1) if match else None
+
+    @staticmethod
+    def _decode_json(body: str) -> dict | None:
+        try:
+            value = json.loads(body)
+        except ValueError:
+            return None
+        return value if isinstance(value, dict) else None
 
     async def async_login(self) -> None:
         """Log in, raising ``SpielerplusAuthError`` on bad credentials."""
@@ -107,7 +121,8 @@ class SpielerplusClient:
             },
         )
         if status != 200:
-            raise SpielerplusAuthError(f"login returned HTTP {status}")
+            # A 5xx or a blocked request is an outage, not a wrong password.
+            raise SpielerplusError(f"login returned HTTP {status}")
         if _title(html) in _LOGIN_TITLES:
             raise SpielerplusAuthError("login was rejected")
 
@@ -118,7 +133,12 @@ class SpielerplusClient:
             if status != 200:
                 raise SpielerplusError(f"select-team returned HTTP {status}")
             if _title(html) in _LOGIN_TITLES:
-                raise SpielerplusAuthError("not logged in")
+                await self._login()
+                status, html = await self._get(const.SELECT_TEAM_URL)
+                if status != 200:
+                    raise SpielerplusError(f"select-team returned HTTP {status}")
+                if _title(html) in _LOGIN_TITLES:
+                    raise SpielerplusAuthError("not logged in")
             return parse_members(html)
 
     async def _select_member_locked(self, member_id: str) -> None:
@@ -132,54 +152,83 @@ class SpielerplusClient:
             await self._select_member_locked(member_id)
 
     async def async_get_events(self) -> list[SpEvent]:
-        """Load all events of the currently selected member.
+        """Load all events of the currently selected member."""
+        async with self.lock:
+            return await self._fetch_events_locked()
 
-        The first page is server-rendered; further pages are appended through
-        ``/events/ajaxgetevents`` until the ajax fragments run out.
+    async def async_get_member_events(self, member_id: str) -> list[SpEvent]:
+        """Switch to a member and load its events under a single lock.
+
+        Switching and reading must not be split: an overlapping write would
+        leave the session on another member and the events of the wrong member
+        would be stored for this one.
         """
         async with self.lock:
+            await self._select_member_locked(member_id)
+            return await self._fetch_events_locked()
+
+    async def _fetch_events_locked(self) -> list[SpEvent]:
+        status, html = await self._get(const.EVENTS_URL)
+        if status != 200:
+            raise SpielerplusError(f"events returned HTTP {status}")
+
+        if _title(html) in _LOGIN_TITLES:
+            await self._login()
             status, html = await self._get(const.EVENTS_URL)
             if status != 200:
                 raise SpielerplusError(f"events returned HTTP {status}")
             if _title(html) in _LOGIN_TITLES:
-                raise SpielerplusAuthError("not logged in")
+                raise SpielerplusAuthError("session expired and re-login failed")
 
-            events = parse_events(html)
-            seen = {event.id for event in events}
-            panels_seen = "event-" in html
+        title = _title(html)
+        if not title.startswith(_EVENT_TITLE_PREFIXES):
+            raise SpielerplusError(
+                f"events page has an unexpected title ({title!r}); "
+                "SpielerPlus layout changed?"
+            )
 
-            offset = 5
-            while True:
-                status, body = await self._post(
-                    const.AJAX_EVENTS_URL, {"offset": str(offset)}
-                )
-                if status != 200:
-                    raise SpielerplusError(f"ajaxgetevents returned HTTP {status}")
-                try:
-                    payload = json.loads(body)
-                except ValueError as err:
-                    raise SpielerplusError("ajaxgetevents returned invalid JSON") from err
+        events = self._parse_page_strict(html)
+        seen = {event.id for event in events}
 
-                fragment = payload.get("html") or ""
-                if "event-" in fragment:
-                    panels_seen = True
-                for event in parse_events(fragment):
-                    if event.id not in seen:
-                        seen.add(event.id)
-                        events.append(event)
+        offset = 5
+        for _ in range(_MAX_EVENT_PAGES):
+            status, body = await self._post(
+                const.AJAX_EVENTS_URL, {"offset": str(offset)}
+            )
+            if status != 200:
+                raise SpielerplusError(f"ajaxgetevents returned HTTP {status}")
+            payload = self._decode_json(body)
+            if payload is None:
+                raise SpielerplusError("ajaxgetevents returned invalid JSON")
 
-                count = payload.get("count")
-                if not fragment or count in (None, -1):
-                    break
-                offset += 5
+            fragment = payload.get("html") or ""
+            added = 0
+            for event in self._parse_page_strict(fragment):
+                if event.id not in seen:
+                    seen.add(event.id)
+                    events.append(event)
+                    added += 1
 
-            if panels_seen and not events:
-                raise SpielerplusError(
-                    "event panels were present but none could be parsed "
-                    "(SpielerPlus layout changed?)"
-                )
+            count = payload.get("count")
+            if not fragment or count in (None, -1) or added == 0:
+                break
+            offset += 5
 
-            return events
+        return events
+
+    @staticmethod
+    def _parse_page_strict(html: str) -> list[SpEvent]:
+        """Parse one page, failing when panels are present but unparsable."""
+        if not html.strip():
+            return []
+        expected = count_event_panels(html)
+        parsed = parse_events(html)
+        if expected and len(parsed) < expected:
+            raise SpielerplusError(
+                "event panels were present but not all could be parsed "
+                "(SpielerPlus layout changed?)"
+            )
+        return parsed
 
     async def async_set_participation(
         self,
@@ -200,29 +249,40 @@ class SpielerplusClient:
         if not reason and status in (Participation.UNSICHER, Participation.ABSAGE):
             reason = const.DEFAULT_PARTICIPATION_REASON
 
+        data = {
+            "Participation[type]": event_type,
+            "Participation[typeid]": event_id,
+            "Participation[participation]": participation_value(status),
+            "Participation[user_id]": member_id,
+            "Participation[reason]": reason,
+        }
+
         async with self.lock:
             await self._select_member_locked(member_id)
-            http_status, body = await self._post(
-                const.PARTICIPATION_URL,
-                {
-                    "Participation[type]": event_type,
-                    "Participation[typeid]": event_id,
-                    "Participation[participation]": participation_value(status),
-                    "Participation[user_id]": member_id,
-                    "Participation[reason]": reason,
-                },
-            )
-            if http_status != 200:
-                snippet = " ".join(body.split())[:200]
-                raise SpielerplusError(
-                    f"participation returned HTTP {http_status}: {snippet}"
-                )
-            try:
-                payload = json.loads(body)
-            except ValueError as err:
-                raise SpielerplusError("participation returned invalid JSON") from err
+            payload = await self._participation_locked(data)
             if payload.get("error"):
                 raise SpielerplusError(
                     "SpielerPlus rejected the participation request"
                 )
 
+    async def _participation_locked(self, data: dict[str, str]) -> dict:
+        """POST the participation, re-logging in once if the session expired."""
+        payload = await self._participation_post(data)
+        if payload is not None:
+            return payload
+
+        # A non-JSON answer means the login page came back instead.
+        await self._login()
+        payload = await self._participation_post(data)
+        if payload is None:
+            raise SpielerplusError("participation returned an unexpected response")
+        return payload
+
+    async def _participation_post(self, data: dict[str, str]) -> dict | None:
+        http_status, body = await self._post(const.PARTICIPATION_URL, data)
+        if http_status != 200:
+            snippet = " ".join(body.split())[:200]
+            raise SpielerplusError(
+                f"participation returned HTTP {http_status}: {snippet}"
+            )
+        return self._decode_json(body)

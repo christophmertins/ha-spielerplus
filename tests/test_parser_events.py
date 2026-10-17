@@ -40,3 +40,27 @@ def test_deadline_passed_and_disabled(events):
 
 def test_garbage_returns_empty(parser):
     assert parser.parse_events("<div class='panel' id='event-training-1'>") == []
+
+
+def test_live_countdown_does_not_mean_deadline_passed(parser):
+    html = (
+        '<div class="list event"><div class="panel" id="event-training-9">'
+        '<div class="panel-heading-info"><div class="panel-title">Mo.</div>'
+        '<div class="panel-subtitle">19.10</div></div>'
+        '<div class="panel-heading-text"><div class="panel-title">Training</div></div>'
+        '<div class="panel-content"><div class="list-item countdown">'
+        "<span>Noch 3 Std.</span></div></div>"
+        '<div class="participation-widget-buttons">'
+        '<button class="participation-button" title="Zugesagt"></button>'
+        "</div></div></div>"
+    )
+    assert parser.parse_events(html)[0].deadline_passed is False
+
+
+def test_count_event_panels(parser):
+    two = (
+        '<div class="panel" id="event-training-1"></div>'
+        '<div class="panel" id="event-game-2"></div>'
+    )
+    assert parser.count_event_panels(two) == 2
+    assert parser.count_event_panels("<html><body>leer</body></html>") == 0

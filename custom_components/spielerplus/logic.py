@@ -69,8 +69,12 @@ def resolve_events(
 
 
 def upcoming(events: list[ResolvedEvent], now: datetime) -> list[ResolvedEvent]:
-    """Return the events that start at or after ``now``."""
-    return [event for event in events if event.start >= now]
+    """Return the events that have not finished yet.
+
+    Events that are currently running are kept, so the calendar stays ``on``
+    for the duration of a training.
+    """
+    return [event for event in events if event.end > now]
 
 
 def next_event(
@@ -89,6 +93,7 @@ def next_event(
 def _event_attributes(event: ResolvedEvent) -> dict[str, object]:
     inner = event.event
     return {
+        "summary": describe_event(event),
         "event_id": inner.id,
         "event_type": inner.type,
         "title": inner.title,
@@ -120,9 +125,29 @@ def calendar_range(
     return [event for event in events if start <= event.start.date() <= end]
 
 
+_WEEKDAYS = ("Mo.", "Di.", "Mi.", "Do.", "Fr.", "Sa.", "So.")
+
+
 def event_summary(event: SpEvent) -> str:
     """Short calendar title for an event."""
     return "Training" if event.type == "training" else event.title
+
+
+def describe_event(event: ResolvedEvent) -> str:
+    """Readable one-line description of an event."""
+    inner = event.event
+    parts = [
+        inner.title,
+        f"{_WEEKDAYS[event.start.weekday()]} {event.start.strftime('%d.%m.%Y')}",
+        f"{event.start.strftime('%H:%M')}-{event.end.strftime('%H:%M')}",
+    ]
+    if event.meeting is not None:
+        parts.append(f"Treffen {event.meeting.strftime('%H:%M')}")
+    if inner.location:
+        parts.append(inner.location)
+    if inner.deadline_passed:
+        parts.append("Zu-/Absage abgelaufen")
+    return ", ".join(parts)
 
 
 def member_options(members: list[SpMember]) -> dict[str, str]:

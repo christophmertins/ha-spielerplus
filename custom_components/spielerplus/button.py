@@ -10,7 +10,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.util import dt as dt_util
 
 from . import const, logic
-from .api import SpielerplusClient
+from .api import SpielerplusClient, SpielerplusError
 from .coordinator import SpielerplusCoordinator
 from .entity import SpielerplusEntity
 from .models import Participation, ResolvedEvent
@@ -83,10 +83,13 @@ class SpielerplusParticipationButton(SpielerplusEntity, ButtonEntity):
             raise HomeAssistantError(
                 "Die Frist zum Zu-/Absagen für diesen Termin ist abgelaufen"
             )
-        await self._client.async_set_participation(
-            member_id=self._member_id,
-            event_type=event.event.type,
-            event_id=event.event.id,
-            status=self._status,
-        )
+        try:
+            await self._client.async_set_participation(
+                member_id=self._member_id,
+                event_type=event.event.type,
+                event_id=event.event.id,
+                status=self._status,
+            )
+        except SpielerplusError as err:
+            raise HomeAssistantError(str(err)) from err
         await self.coordinator.async_request_refresh()

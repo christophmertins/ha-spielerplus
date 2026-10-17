@@ -7,11 +7,11 @@ import logging
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import ConfigEntryAuthFailed
+from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers.aiohttp_client import async_create_clientsession
 
 from . import const
-from .api import SpielerplusAuthError, SpielerplusClient
+from .api import SpielerplusAuthError, SpielerplusClient, SpielerplusError
 from .coordinator import SpielerplusCoordinator
 from .services import async_setup_services, async_unload_services
 
@@ -32,6 +32,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         await client.async_login()
     except SpielerplusAuthError as err:
         raise ConfigEntryAuthFailed(str(err)) from err
+    except SpielerplusError as err:
+        raise ConfigEntryNotReady(str(err)) from err
 
     coordinator = SpielerplusCoordinator(hass, entry, client)
     await coordinator.async_config_entry_first_refresh()
