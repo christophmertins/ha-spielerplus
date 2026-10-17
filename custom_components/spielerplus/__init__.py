@@ -41,6 +41,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data.setdefault(const.DOMAIN, {})[entry.entry_id] = {
         "client": client,
         "coordinator": coordinator,
+        "session": session,
     }
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
@@ -58,7 +59,11 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
     if not await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
         return False
-    hass.data[const.DOMAIN].pop(entry.entry_id, None)
+    data = hass.data[const.DOMAIN].pop(entry.entry_id, None)
+    if data is not None:
+        # The session was created for this entry; close it on unload so a
+        # reload does not leak the connector until HA shuts down.
+        await data["session"].close()
     if not hass.data[const.DOMAIN]:
         await async_unload_services(hass)
     return True

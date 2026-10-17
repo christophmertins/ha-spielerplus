@@ -26,6 +26,28 @@ def test_resolve_year_keeps_current_year_for_near_past(logic):
     assert logic.resolve_year(17, 10, date(2026, 10, 18)) == 2026
 
 
+def test_resolve_year_matches_the_panel_weekday_over_the_past_tolerance(logic):
+    # 15.09.2026 is a Tuesday; a panel labelled "Di." (weekday=1) is a real
+    # event ~3 months in the past, not one pushed into next year by the
+    # 30-day tolerance.
+    assert logic.resolve_year(15, 9, date(2026, 12, 20), weekday=1) == 2026
+
+
+def test_resolve_year_uses_weekday_to_roll_into_next_year(logic):
+    # "05.01" on a December page labelled "Di." (weekday=1): only 2027-01-05
+    # is a Tuesday, so it belongs to next year even though 2026-01-05 also
+    # lies in the past tolerance.
+    assert logic.resolve_year(5, 1, date(2026, 12, 20), weekday=1) == 2027
+
+
+def test_resolve_event_uses_the_event_weekday(logic, models):
+    event = models.SpEvent(
+        id="a", type="training", title="Training", day=15, month=9, weekday=1
+    )
+    resolved = logic.resolve_event(event, date(2026, 12, 20))
+    assert resolved.start.date() == date(2026, 9, 15)
+
+
 def test_resolve_event_builds_start_end_meeting(logic, models):
     r = logic.resolve_event(_ev(models, "1"), date(2026, 10, 18))
     assert r.start == datetime(2026, 10, 19, 18, 30)

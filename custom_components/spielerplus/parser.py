@@ -25,6 +25,9 @@ _STATUS_BY_TITLE = {
     "Absagen / Abwesend": Participation.ABSAGE,
 }
 
+#: The panel shows the weekday as "Mo."/"Di."/…; it disambiguates the year.
+_WEEKDAY_BY_LABEL = {"mo": 0, "di": 1, "mi": 2, "do": 3, "fr": 4, "sa": 5, "so": 6}
+
 #: SpielerPlus shows this instead of the buttons once the deadline has passed.
 _DEADLINE_TEXT = "Zeit zum Zu-/Absagen abgelaufen"
 _PANEL_ID_ATTR_RE = re.compile(r'id="event-[a-z]+-\d+"')
@@ -86,6 +89,11 @@ def _parse_time(text: str) -> time | None:
     return time(int(match.group(1)), int(match.group(2)))
 
 
+def _parse_weekday(text: str) -> int | None:
+    """Map a panel weekday label (``Mo.``/``Di.``/…) to 0=Monday … 6=Sunday."""
+    return _WEEKDAY_BY_LABEL.get(text.strip()[:2].lower())
+
+
 def _participation_and_deadline(panel: Tag) -> tuple[Participation, bool]:
     status = Participation.OFFEN
     disabled = False
@@ -112,6 +120,7 @@ def parse_events(html: str) -> list[SpEvent]:
         event_type, event_id = id_match.group(1), id_match.group(2)
 
         title_el = panel.select_one(".panel-heading-text .panel-title")
+        weekday_el = panel.select_one(".panel-heading-info .panel-title")
         date_el = panel.select_one(".panel-heading-info .panel-subtitle")
         if title_el is None or date_el is None:
             continue
@@ -140,6 +149,11 @@ def parse_events(html: str) -> list[SpEvent]:
                 title=title,
                 day=int(date_match.group(1)),
                 month=int(date_match.group(2)),
+                weekday=(
+                    _parse_weekday(weekday_el.get_text())
+                    if weekday_el is not None
+                    else None
+                ),
                 start_time=times.get("beginn"),
                 end_time=times.get("ende"),
                 meeting_time=times.get("treffen"),

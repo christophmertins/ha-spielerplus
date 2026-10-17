@@ -38,6 +38,21 @@ def test_deadline_passed_and_disabled(events):
     assert events[2].deadline_passed is True
 
 
+def test_parses_weekday(events):
+    assert [e.weekday for e in events] == [0, 1, 5]
+
+
+def test_unknown_weekday_label_is_none(parser):
+    html = (
+        '<div class="list event"><div class="panel" id="event-training-9">'
+        '<div class="panel-heading-info"><div class="panel-title">Xyz</div>'
+        '<div class="panel-subtitle">19.10</div></div>'
+        '<div class="panel-heading-text"><div class="panel-title">Training</div></div>'
+        "</div></div>"
+    )
+    assert parser.parse_events(html)[0].weekday is None
+
+
 def test_garbage_returns_empty(parser):
     assert parser.parse_events("<div class='panel' id='event-training-1'>") == []
 

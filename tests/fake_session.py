@@ -9,6 +9,7 @@ manager with ``.status``/``.text()``).
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Callable
 from typing import Any
 
@@ -21,9 +22,14 @@ class FakeResponse:
         self._body = body
 
     async def text(self) -> str:
+        # Yield so awaiting it is a real suspension point: without one, two
+        # tasks gathered together would never interleave and a test of the
+        # client's lock would pass even with the lock removed.
+        await asyncio.sleep(0)
         return self._body
 
     async def __aenter__(self) -> "FakeResponse":
+        await asyncio.sleep(0)
         return self
 
     async def __aexit__(self, *exc_info: object) -> bool:

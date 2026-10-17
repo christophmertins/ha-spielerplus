@@ -39,6 +39,7 @@ class SpEvent:
     title: str
     day: int
     month: int
+    weekday: int | None = None
     start_time: time | None = None
     end_time: time | None = None
     meeting_time: time | None = None

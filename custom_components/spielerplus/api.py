@@ -62,6 +62,9 @@ class SpielerplusClient:
         self._password = password
         #: Serializes requests so the ``switch-user`` context cannot be raced.
         self.lock = asyncio.Lock()
+        #: The member the session is currently switched to. ``None`` after a
+        #: login, because logging in resets the context to the account default.
+        self._member_id: str | None = None
 
     async def _get(self, url: str, **kwargs) -> tuple[int, str]:
         try:
@@ -125,6 +128,8 @@ class SpielerplusClient:
             raise SpielerplusError(f"login returned HTTP {status}")
         if _title(html) in _LOGIN_TITLES:
             raise SpielerplusAuthError("login was rejected")
+        # A login resets the session to the account's default member.
+        self._member_id = None
 
     async def async_get_members(self) -> list[SpMember]:
         """Load the account's members/teams from the select-team page."""
@@ -142,9 +147,22 @@ class SpielerplusClient:
             return parse_members(html)
 
     async def _select_member_locked(self, member_id: str) -> None:
-        status, _ = await self._get(const.SWITCH_USER_URL, params={"id": member_id})
+        status, html = await self._get(const.SWITCH_USER_URL, params={"id": member_id})
         if status >= 400:
             raise SpielerplusError(f"switch-user returned HTTP {status}")
+        if _title(html) in _LOGIN_TITLES:
+            # On a dead session Yii2 answers the switch with the login page and
+            # HTTP 200 instead of switching, so the switch would silently be a
+            # no-op and the next read would return another member's events.
+            await self._login()
+            status, html = await self._get(
+                const.SWITCH_USER_URL, params={"id": member_id}
+            )
+            if status >= 400:
+                raise SpielerplusError(f"switch-user returned HTTP {status}")
+            if _title(html) in _LOGIN_TITLES:
+                raise SpielerplusAuthError("session expired and re-login failed")
+        self._member_id = member_id
 
     async def async_select_member(self, member_id: str) -> None:
         """Switch the session context to a member/team."""
@@ -165,15 +183,19 @@ class SpielerplusClient:
         """
         async with self.lock:
             await self._select_member_locked(member_id)
-            return await self._fetch_events_locked()
+            return await self._fetch_events_locked(member_id)
 
-    async def _fetch_events_locked(self) -> list[SpEvent]:
+    async def _fetch_events_locked(self, member_id: str | None = None) -> list[SpEvent]:
         status, html = await self._get(const.EVENTS_URL)
         if status != 200:
             raise SpielerplusError(f"events returned HTTP {status}")
 
         if _title(html) in _LOGIN_TITLES:
             await self._login()
+            if member_id is not None:
+                # The login reset the switched member; re-apply it so these
+                # events really belong to the member the caller asked for.
+                await self._select_member_locked(member_id)
             status, html = await self._get(const.EVENTS_URL)
             if status != 200:
                 raise SpielerplusError(f"events returned HTTP {status}")
@@ -259,13 +281,15 @@ class SpielerplusClient:
 
         async with self.lock:
             await self._select_member_locked(member_id)
-            payload = await self._participation_locked(data)
+            payload = await self._participation_locked(data, member_id)
             if payload.get("error"):
                 raise SpielerplusError(
                     "SpielerPlus rejected the participation request"
                 )
 
-    async def _participation_locked(self, data: dict[str, str]) -> dict:
+    async def _participation_locked(
+        self, data: dict[str, str], member_id: str
+    ) -> dict:
         """POST the participation, re-logging in once if the session expired."""
         payload = await self._participation_post(data)
         if payload is not None:
@@ -273,6 +297,9 @@ class SpielerplusClient:
 
         # A non-JSON answer means the login page came back instead.
         await self._login()
+        # The login reset the switched member; re-apply it or the retry is sent
+        # as the wrong member and SpielerPlus answers 403.
+        await self._select_member_locked(member_id)
         payload = await self._participation_post(data)
         if payload is None:
             raise SpielerplusError("participation returned an unexpected response")

@@ -21,8 +21,25 @@ def participation_value(status: Participation) -> str:
     return PARTICIPATION_VALUES[status]
 
 
-def resolve_year(day: int, month: int, today: date) -> int:
-    """Resolve the year for a ``day.month`` pair shown on the events page."""
+def resolve_year(day: int, month: int, today: date, weekday: int | None = None) -> int:
+    """Resolve the year for a ``day.month`` pair shown on the events page.
+
+    When the panel's weekday is known, the year is the one (of the previous,
+    current and next year) whose date falls on that weekday — that is exact,
+    because two consecutive years never share a weekday for the same date.
+    Without a weekday the ``day.month`` is assumed to be current unless it
+    lies further in the past than ``_PAST_TOLERANCE_DAYS``.
+    """
+    if weekday is not None:
+        for candidate_year in (today.year, today.year + 1, today.year - 1):
+            try:
+                candidate = date(candidate_year, month, day)
+            except ValueError:  # e.g. 29 February in a non-leap year
+                continue
+            if candidate.weekday() == weekday:
+                return candidate_year
+        # A weekday that matches no nearby year: fall through to the heuristic.
+
     try:
         candidate = date(today.year, month, day)
     except ValueError:
@@ -40,7 +57,9 @@ def resolve_event(
     When ``tz`` is given the resulting datetimes are timezone-aware (Home
     Assistant requires this for ``timestamp`` sensors).
     """
-    day = date(resolve_year(event.day, event.month, today), event.month, event.day)
+    day = date(
+        resolve_year(event.day, event.month, today, event.weekday), event.month, event.day
+    )
     start = datetime.combine(day, event.start_time or time(0, 0))
     end = (
         datetime.combine(day, event.end_time)

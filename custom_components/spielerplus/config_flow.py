@@ -59,19 +59,23 @@ class SpielerplusConfigFlow(ConfigFlow, domain=const.DOMAIN):
     async def _async_verify(self, email: str, password: str) -> str | None:
         """Log in and return an error key, or ``None`` on success."""
         session = async_create_clientsession(self.hass)
-        client = SpielerplusClient(session, email, password)
         try:
-            await client.async_login()
-            self._members = await client.async_get_members()
-        except SpielerplusAuthError as err:
-            _LOGGER.warning("SpielerPlus rejected the login: %s", err)
-            return "invalid_auth"
-        except SpielerplusError as err:
-            _LOGGER.warning("SpielerPlus connection failed: %s", err)
-            return "cannot_connect"
-        if not self._members:
-            return "no_members"
-        return None
+            client = SpielerplusClient(session, email, password)
+            try:
+                await client.async_login()
+                self._members = await client.async_get_members()
+            except SpielerplusAuthError as err:
+                _LOGGER.warning("SpielerPlus rejected the login: %s", err)
+                return "invalid_auth"
+            except SpielerplusError as err:
+                _LOGGER.warning("SpielerPlus connection failed: %s", err)
+                return "cannot_connect"
+            if not self._members:
+                return "no_members"
+            return None
+        finally:
+            # The probe session is only used to verify the credentials.
+            await session.close()
 
     async def async_step_user(
         self, user_input: dict | None = None

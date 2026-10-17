@@ -96,6 +96,64 @@ async def test_get_events_raises_when_relogin_also_fails(api, const):
         await api.SpielerplusClient(session, "a", "b").async_get_events()
 
 
+async def test_switch_user_retries_after_an_expired_session(api, const):
+    calls = {"n": 0}
+
+    def switch(request):
+        calls["n"] += 1
+        return (200, LOGIN_REJECTED) if calls["n"] == 1 else (200, "<html></html>")
+
+    session = FakeSession(
+        {
+            ("GET", const.LOGIN_URL): (200, LOGIN_PAGE),
+            ("POST", const.LOGIN_URL): (200, TEAM_PAGE),
+            ("GET", const.SWITCH_USER_URL): switch,
+        }
+    )
+    await api.SpielerplusClient(session, "a", "b").async_select_member("101")
+
+    assert calls["n"] == 2
+    assert any(
+        r["method"] == "POST" and r["url"] == const.LOGIN_URL
+        for r in session.requests
+    )
+
+
+async def test_switch_user_raises_when_relogin_also_fails(api, const):
+    session = FakeSession(
+        {
+            ("GET", const.LOGIN_URL): (200, LOGIN_PAGE),
+            ("POST", const.LOGIN_URL): (200, TEAM_PAGE),
+            ("GET", const.SWITCH_USER_URL): (200, LOGIN_REJECTED),
+        }
+    )
+    with pytest.raises(api.SpielerplusAuthError):
+        await api.SpielerplusClient(session, "a", "b").async_select_member("101")
+
+
+async def test_get_member_events_reselects_the_member_after_relogin(api, const):
+    events_calls = {"n": 0}
+
+    def events_route(request):
+        events_calls["n"] += 1
+        return (200, LOGIN_REJECTED) if events_calls["n"] == 1 else (200, EVENTS_PAGE)
+
+    routes = _routes(const, EVENTS_PAGE)
+    routes[("GET", const.EVENTS_URL)] = events_route
+    routes[("GET", const.SWITCH_USER_URL)] = (200, "<html></html>")
+    session = FakeSession(routes)
+
+    events = await api.SpielerplusClient(session, "a", "b").async_get_member_events("101")
+
+    assert [e.id for e in events] == ["111", "222", "333"]
+    second_events = max(
+        i for i, r in enumerate(session.requests) if r["url"] == const.EVENTS_URL
+    )
+    previous = session.requests[second_events - 1]
+    assert previous["url"] == const.SWITCH_USER_URL
+    assert previous["params"] == {"id": "101"}
+
+
 async def test_member_switch_and_fetch_are_not_interleaved_by_a_write(api, const):
     routes = _routes(const, EVENTS_PAGE)
     routes[("GET", const.SWITCH_USER_URL)] = (200, "<html></html>")
@@ -171,6 +229,37 @@ async def test_set_participation_relogins_on_an_html_answer(api, const):
         status=api.Participation.ZUSAGE,
     )
     assert calls["n"] == 2
+
+
+async def test_set_participation_reselects_the_member_after_relogin(api, const):
+    calls = {"n": 0}
+
+    def participation(request):
+        calls["n"] += 1
+        return (200, LOGIN_REJECTED) if calls["n"] == 1 else (200, "{}")
+
+    session = FakeSession(
+        {
+            ("GET", const.LOGIN_URL): (200, LOGIN_PAGE),
+            ("POST", const.LOGIN_URL): (200, TEAM_PAGE),
+            ("GET", const.SWITCH_USER_URL): (200, "<html></html>"),
+            ("POST", const.PARTICIPATION_URL): participation,
+        }
+    )
+    await api.SpielerplusClient(session, "a", "b").async_set_participation(
+        member_id="101", event_type="training", event_id="111",
+        status=api.Participation.ZUSAGE,
+    )
+
+    assert calls["n"] == 2
+    posts = [
+        i
+        for i, r in enumerate(session.requests)
+        if r["url"] == const.PARTICIPATION_URL
+    ]
+    previous = session.requests[posts[1] - 1]
+    assert previous["url"] == const.SWITCH_USER_URL
+    assert previous["params"] == {"id": "101"}
 
 
 async def test_set_participation_raises_when_api_reports_error(api, const):
