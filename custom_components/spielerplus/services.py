@@ -27,6 +27,8 @@ _STATUS_MAP: dict[str, Participation] = {
 
 _SCHEMA = vol.Schema(
     {
+        # Populated by HA from the service call's ``target``.
+        vol.Optional("entity_id"): vol.Any(cv.entity_id, cv.entity_ids),
         vol.Required("event_id"): cv.string,
         vol.Required("status"): vol.In(list(_STATUS_MAP)),
         vol.Optional("event_type"): cv.string,
