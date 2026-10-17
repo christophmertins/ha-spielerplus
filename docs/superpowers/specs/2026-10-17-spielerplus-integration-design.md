@@ -132,7 +132,8 @@ Gerätename aus dem in der Mitgliederliste gefundenen Namen. Beispiel (Mitglied 
 | `button.spielerplus_x_absagen` | Button | setzt den nächsten kommenden Termin auf Absage (0) |
 
 Sensor-Attribute (beide Sensoren): `event_id`, `event_type` (`training`/`game`/…), `title`,
-`start`, `end`, `meeting_time`, `location`, `participation` (`zusage`/`unsicher`/`absage`/`offen`),
+`start`, `end`, `meeting_time`, `location` (**best-effort** — die Terminliste enthält keinen Ort,
+daher in der Regel `null`), `participation` (`zusage`/`unsicher`/`absage`/`offen`),
 `deadline_passed` (bool), `events` (Liste der kommenden Termine mit denselben Feldern).
 
 Buttons sind `unavailable`, wenn es keinen kommenden Termin gibt oder die Zu-/Absagefrist
